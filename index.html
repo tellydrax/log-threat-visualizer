@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Threat Visualizer | @tellydrax</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #6e40c9;
+      --accent-hover: #8957e5;
+      --high: #e11d48;
+      --med: #d97706;
+      --low: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 { font-family: monospace; font-size: 1.5rem; }
+    h1 span { color: #a78bfa; }
+    .tag {
+      background: #1f1635;
+      color: #c4b5fd;
+      border: 1px solid var(--accent);
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-family: monospace;
+    }
+    .controls { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.6rem 1.1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    button.secondary:hover { border-color: #8b949e; }
+    textarea {
+      width: 100%;
+      height: 170px;
+      background: var(--panel);
+      color: #c9d1d9;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.9rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      resize: vertical;
+      margin-bottom: 1.5rem;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    .card .val { font-size: 1.75rem; font-weight: 700; font-family: monospace; margin-top: 0.25rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.85rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    th { background: #1c2128; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    td.mono { font-family: monospace; }
+    .badge {
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      font-family: monospace;
+    }
+    .HIGH { background: rgba(225, 29, 72, 0.18); color: #fb7185; border: 1px solid var(--high); }
+    .MEDIUM { background: rgba(217, 119, 6, 0.18); color: #fbbf24; border: 1px solid var(--med); }
+    .LOW { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid var(--low); }
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    footer a { color: #a78bfa; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>&gt;_ <span>log-threat-visualizer</span></h1>
+      <span class="tag">CLIENT-SIDE SOC PARSER</span>
+    </header>
+
+    <div class="controls">
+      <button onclick="analyzeLogs()">Analyze Logs</button>
+      <button class="secondary" onclick="loadSample()">Load Sample SSH Attack</button>
+      <button class="secondary" onclick="exportJSON()">Export JSON Report</button>
+      <button class="secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <textarea id="logInput" placeholder="Paste /var/log/auth.log or Nginx/Apache access logs here..."></textarea>
+
+    <div class="stats">
+      <div class="card"><div class="label">Total Events</div><div class="val" id="totalEvents">0</div></div>
+      <div class="card"><div class="label">Failed Auth / Errors</div><div class="val" id="failedCount">0</div></div>
+      <div class="card"><div class="label">Unique Threat IPs</div><div class="val" id="uniqueIps">0</div></div>
+      <div class="card"><div class="label">High Severity IPs</div><div class="val" id="highCount" style="color:#fb7185">0</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Source IP</th>
+          <th>Attempts</th>
+          <th>Targeted Users / Paths</th>
+          <th>Severity</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody">
+        <tr><td colspan="4" style="color:var(--muted);text-align:center;">No logs analyzed yet. Click "Load Sample SSH Attack" to test.</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      Built by <a href="https://github.com/tellydrax">@tellydrax</a> • 100% browser-based analysis (zero log upload)
+    </footer>
+  </div>
+
+  <script>
+    let latestReport = null;
+
+    const SAMPLE = `Nov 26 09:14:01 srv-edge sshd[2201]: Failed password for root from 185.220.101.45 port 51234 ssh2
+Nov 26 09:14:03 srv-edge sshd[2201]: Failed password for root from 185.220.101.45 port 51238 ssh2
+Nov 26 09:14:06 srv-edge sshd[2201]: Failed password for admin from 185.220.101.45 port 51241 ssh2
+Nov 26 09:14:09 srv-edge sshd[2201]: Failed password for invalid user deploy from 185.220.101.45 port 51244 ssh2
+Nov 26 09:14:12 srv-edge sshd[2201]: Failed password for ubuntu from 185.220.101.45 port 51249 ssh2
+Nov 26 09:18:40 srv-edge sshd[2245]: Failed password for root from 91.240.118.172 port 40211 ssh2
+Nov 26 09:18:44 srv-edge sshd[2245]: Failed password for oracle from 91.240.118.172 port 40219 ssh2
+Nov 26 09:18:48 srv-edge sshd[2245]: Failed password for postgres from 91.240.118.172 port 40225 ssh2
+Nov 26 09:22:15 srv-edge sshd[2290]: Failed password for invalid user test from 45.155.205.99 port 33812 ssh2
+Nov 26 09:25:02 srv-edge sshd[2310]: Accepted publickey for ops from 10.0.14.8 port 54312 ssh2`;
+
+    function loadSample() {
+      document.getElementById('logInput').value = SAMPLE;
+      analyzeLogs();
+    }
+
+    function analyzeLogs() {
+      const raw = document.getElementById('logInput').value.trim();
+      if (!raw) return;
+
+      const lines = raw.split('\n');
+      const ipData = {};
+      let failedTotal = 0;
+
+      const failRegex = /(?:Failed password for (?:invalid user )?(\S+) from (\d+\.\d+\.\d+\.\d+))|(?:(\d+\.\d+\.\d+\.\d+).*"(?:GET|POST)\s+(\S+).*"\s+(?:401|403|404))/i;
+
+      lines.forEach(line => {
+        const match = line.match(failRegex);
+        if (match) {
+          failedTotal++;
+          const target = match[1] || match[4] || 'unknown';
+          const ip = match[2] || match[3];
+          if (!ipData[ip]) ipData[ip] = { count: 0, targets: new Set() };
+          ipData[ip].count++;
+          ipData[ip].targets.add(target);
+        }
+      });
+
+      const entries = Object.entries(ipData)
+        .map(([ip, info]) => {
+          const severity = info.count >= 5 ? 'HIGH' : info.count >= 3 ? 'MEDIUM' : 'LOW';
+          return { ip, attempts: info.count, targets: Array.from(info.targets), severity };
+        })
+        .sort((a, b) => b.attempts - a.attempts);
+
+      document.getElementById('totalEvents').textContent = lines.length;
+      document.getElementById('failedCount').textContent = failedTotal;
+      document.getElementById('uniqueIps').textContent = entries.length;
+      document.getElementById('highCount').textContent = entries.filter(e => e.severity === 'HIGH').length;
+
+      const tbody = document.getElementById('resultsBody');
+      if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;">No suspicious authentication or HTTP 401/403/404 events detected.</td></tr>';
+      } else {
+        tbody.innerHTML = entries.map(e => `
+          <tr>
+            <td class="mono">${e.ip}</td>
+            <td class="mono">${e.attempts}</td>
+            <td class="mono">${e.targets.join(', ')}</td>
+            <td><span class="badge ${e.severity}">${e.severity}</span></td>
+          </tr>
+        `).join('');
+      }
+
+      latestReport = {
+        generated_at: new Date().toISOString(),
+        total_lines: lines.length,
+        suspicious_events: failedTotal,
+        findings: entries
+      };
+    }
+
+    function exportJSON() {
+      if (!latestReport) analyzeLogs();
+      if (!latestReport) return;
+      const blob = new Blob([JSON.stringify(latestReport, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `soc_threat_report_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function clearAll() {
+      document.getElementById('logInput').value = '';
+      latestReport = null;
+      ['totalEvents', 'failedCount', 'uniqueIps', 'highCount'].forEach(id => document.getElementById(id).textContent = '0');
+      document.getElementById('resultsBody').innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;">Cleared. Paste logs or load sample data.</td></tr>';
+    }
+  </script>
+</body>
+</html>
